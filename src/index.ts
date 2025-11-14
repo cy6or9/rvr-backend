@@ -19,8 +19,19 @@ app.use("/uploads", express.static("uploads"));
 
 // API routes
 app.use("/api/articles", articles);
+
+// River / gauge data
+// Matches the frontend call in RiverConditions.tsx: `/api/river-data?site=...`
+app.use("/api/river-data", river);
+// Also keep the older prefix working just in case something else uses it.
 app.use("/api/river", river);
+
+// AQI proxy
+// Matches the frontend call: `/api/aqi?lat=...&lon=...`
+app.use("/api/aqi", weather);
+// Optional legacy prefix if you later add other weather endpoints.
 app.use("/api/weather", weather);
+
 app.use("/api/auth", auth);
 app.use("/api/uploads", uploads);
 
