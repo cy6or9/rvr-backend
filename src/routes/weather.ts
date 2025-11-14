@@ -1,71 +1,112 @@
-import { Router } from "express";
-
-declare const fetch: any;
+import { Router, Request, Response } from "express";
 
 const router = Router();
 
-/**
- * Very small AQI proxy so the frontend can keep your AirNow key
- * on the server side instead of in the browser.
- *
- * GET /api/aqi?lat=37.9&lon=-87.6
- *
- * Response shape matches the AQIData type used in the client:
- *   { aqi: number | null, category: string }
- */
-router.get("/", async (req, res) => {
-  const lat = Number(req.query.lat);
-  const lon = Number(req.query.lon);
+/* ---------------------------------------------------
+   Types
+--------------------------------------------------- */
+
+type AQIResponse = {
+  hourly?: {
+    time?: string[];
+    us_aqi?: (number | null)[];
+  };
+};
+
+export type AQIData = {
+  aqi: number | null;
+  aqiColor: string;
+  category: string;
+};
+
+/* ---------------------------------------------------
+   Helpers
+--------------------------------------------------- */
+
+function aqiToColorAndCategory(aqi: number | null): {
+  color: string;
+  category: string;
+} {
+  if (aqi == null || !Number.isFinite(aqi)) {
+    return { color: "#4CAF50", category: "Unknown" };
+  }
+  if (aqi <= 50) return { color: "#4CAF50", category: "Good" };
+  if (aqi <= 100) return { color: "#F4D06F", category: "Moderate" };
+  if (aqi <= 150) return { color: "#F4A259", category: "USG" };
+  if (aqi <= 200) return { color: "#D35D6E", category: "Unhealthy" };
+  if (aqi <= 300) return { color: "#9D4EDD", category: "Very Unhealthy" };
+  return { color: "#B0003A", category: "Hazardous" };
+}
+
+/* ---------------------------------------------------
+   AQI handler
+   Used by:
+   - /api/aqi           (index.ts direct)
+   - /api/weather/aqi   (router below)
+--------------------------------------------------- */
+
+export async function aqiHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
+  const lat = parseFloat(req.query.lat as string);
+  const lon = parseFloat(req.query.lon as string);
 
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    res.status(400).json({ error: "lat and lon query params are required" });
+    res.status(400).json({ error: "Missing or invalid lat/lon" });
     return;
   }
 
-  const apiKey = process.env.548E45A5-5DCC-475E-A72D-504280F01B89;
-
-  if (!apiKey) {
-    // Graceful fallback so the UI still works, just without AQI numbers.
-    res.json({ aqi: null, category: "Unknown" });
-    return;
-  }
+  const url =
+    `https://air-quality-api.open-meteo.com/v1/air-quality` +
+    `?latitude=${lat}&longitude=${lon}` +
+    `&hourly=us_aqi&past_days=1&timezone=America/Chicago`;
 
   try {
-    const url =
-      "https://www.airnowapi.org/aq/observation/latLong/current/?" +
-      `format=application/json&latitude=${lat}&longitude=${lon}` +
-      "&distance=25&API_KEY=" +
-      encodeURIComponent(apiKey);
-
     const r = await fetch(url);
-    if (!r || !r.ok) {
-      const status = r?.status ?? "unknown";
-      throw new Error(`AirNow HTTP ${status}`);
+    if (!r.ok) throw new Error(`AQI HTTP ${r.status}`);
+
+    const j = (await r.json()) as AQIResponse;
+    const values = Array.isArray(j.hourly?.us_aqi) ? j.hourly!.us_aqi! : [];
+
+    let aqi: number | null = null;
+    for (let i = values.length - 1; i >= 0; i--) {
+      const v = values[i];
+      if (typeof v === "number" && Number.isFinite(v)) {
+        aqi = v;
+        break;
+      }
     }
 
-    const json = await r.json();
+    const { color, category } = aqiToColorAndCategory(aqi);
+    const payload: AQIData = {
+      aqi,
+      aqiColor: color,
+      category,
+    };
 
-    if (!Array.isArray(json) || json.length === 0) {
-      res.json({ aqi: null, category: "Unknown" });
-      return;
-    }
-
-    // Prefer the "PM2.5" record if present, otherwise first entry.
-    const preferred =
-      json.find((obs: any) => obs.ParameterName === "PM2.5") ?? json[0];
-
-    const aqi =
-      preferred.AQI != null && !isNaN(Number(preferred.AQI))
-        ? Number(preferred.AQI)
-        : null;
-    const category =
-      preferred.Category?.Name || (aqi == null ? "Unknown" : "Uncategorized");
-
-    res.json({ aqi, category });
+    res.status(200).json(payload);
   } catch (err) {
-    console.error("AQI route error:", err);
-    res.status(500).json({ aqi: null, category: "Unknown" });
+    // eslint-disable-next-line no-console
+    console.error("AQI fetch error:", err);
+
+    const { color, category } = aqiToColorAndCategory(null);
+    const payload: AQIData = {
+      aqi: null,
+      aqiColor: color,
+      category,
+    };
+
+    // Still 200 so the UI shows "No data" instead of breaking
+    res.status(200).json(payload);
   }
-});
+}
+
+/* ---------------------------------------------------
+   Router
+   Mounted at /api/weather
+--------------------------------------------------- */
+
+router.get("/aqi", aqiHandler);
 
 export default router;
