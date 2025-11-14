@@ -18,14 +18,15 @@ app.use(sessionMiddleware);
 // Serve uploaded files
 app.use("/uploads", express.static("uploads"));
 
-// Core API routes (existing)
+// Existing API routes
 app.use("/api/articles", articles);
 app.use("/api/river", river);
 app.use("/api/weather", weather);
 app.use("/api/auth", auth);
 app.use("/api/uploads", uploads);
 
-// --- Direct endpoints used by the frontend ---
+// --- Endpoints your frontend actually calls ---
+
 // River conditions: /api/river-data?site=03322420
 app.get("/api/river-data", riverDataHandler);
 

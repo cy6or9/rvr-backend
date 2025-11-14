@@ -5,6 +5,7 @@ const router = Router();
 /* ---------------------------------------------------
    Types
 --------------------------------------------------- */
+
 type USGSPoint = { dateTime: string; value: string };
 
 type USGSResponse = {
@@ -40,8 +41,8 @@ export type RiverData = {
 };
 
 /**
- * Manual flood-stage reference for the main gauges we care about.
- * Add more as needed (key is the USGS site id).
+ * Manual flood-stage reference for your main gauges.
+ * (Add / tweak as needed.)
  */
 const FLOOD_STAGE_FT: Record<string, number> = {
   "03381700": 37, // Newburgh
@@ -69,7 +70,7 @@ function generatePrediction(history: Array<{ t: string; v: number }>): Array<{
   const lastValue = lastTen[lastTen.length - 1].v;
   const now = new Date(lastTen[lastTen.length - 1].t).getTime();
 
-  // Very simple linear projection for the next 10 days
+  // Simple linear projection for the next 10 days
   return Array.from({ length: 10 }, (_, i) => ({
     t: new Date(now + (i + 1) * 86400000).toISOString(),
     v: parseFloat((lastValue + slope * (i + 1)).toFixed(2)),
@@ -77,9 +78,9 @@ function generatePrediction(history: Array<{ t: string; v: number }>): Array<{
 }
 
 /* ---------------------------------------------------
-   Handler used by both:
-   - /api/river-data        (index.ts direct)
-   - /api/river/data        (router below)
+   Handler used for:
+   - GET /api/river-data?site=...
+   - GET /api/river/data?site=... (router below)
 --------------------------------------------------- */
 
 export async function riverDataHandler(
@@ -148,7 +149,7 @@ export async function riverDataHandler(
       prediction: [],
     };
 
-    // Still return 200 so the frontend can show "No data" instead of hanging
+    // Return 200 so the frontend shows "No data" instead of hanging
     res.status(200).json(fallback);
   }
 }
@@ -156,7 +157,6 @@ export async function riverDataHandler(
 /* ---------------------------------------------------
    Router
    (Mounted at /api/river in index.ts)
-   So /api/river/data works as well.
 --------------------------------------------------- */
 
 router.get("/data", riverDataHandler);

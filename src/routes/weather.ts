@@ -40,9 +40,9 @@ function aqiToColorAndCategory(aqi: number | null): {
 
 /* ---------------------------------------------------
    AQI handler
-   Used by:
-   - /api/aqi           (index.ts direct)
-   - /api/weather/aqi   (router below)
+   Used for:
+   - GET /api/aqi?lat=...&lon=...
+   - GET /api/weather/aqi?lat=...&lon=...
 --------------------------------------------------- */
 
 export async function aqiHandler(
@@ -97,14 +97,13 @@ export async function aqiHandler(
       category,
     };
 
-    // Still 200 so the UI shows "No data" instead of breaking
     res.status(200).json(payload);
   }
 }
 
 /* ---------------------------------------------------
    Router
-   Mounted at /api/weather
+   Mounted at /api/weather in index.ts
 --------------------------------------------------- */
 
 router.get("/aqi", aqiHandler);
