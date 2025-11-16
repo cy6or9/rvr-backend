@@ -1,36 +1,21 @@
 {
   "name": "rvr-backend",
   "version": "1.0.0",
-  "license": "MIT",
   "type": "module",
-  "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "ts-node --esm server/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "db:push": "drizzle-kit push"
+    "start": "node dist/server/index.js"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^0.10.4",
-    "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",
-    "drizzle-orm": "^0.39.1",
-    "drizzle-zod": "^0.8.3",
-    "express": "^4.21.2",
-    "express-session": "^1.18.1",
-    "multer": "^2.0.2",
-    "pg": "^8.11.3",
-    "zod": "^4.1.12"
+    "express": "^4.18.2",
+    "node-fetch": "^3.3.2"
   },
   "devDependencies": {
-    "@types/connect-pg-simple": "^7.0.3",
-    "@types/cors": "^2.8.19",
     "@types/express": "^4.17.21",
-    "@types/express-session": "^1.18.0",
-    "@types/multer": "^2.0.0",
-    "@types/node": "^20.16.11",
-    "drizzle-kit": "^0.31.4",
-    "tsx": "^4.20.5",
-    "typescript": "^5.6.3"
+    "@types/node": "^20.12.7",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
   }
 }
