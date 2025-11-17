@@ -8,17 +8,13 @@ const { Pool } = pkg;
  *
  * Example:
  *   postgres://user:password@host:5432/dbname
- *
- * For Render / Neon, enable SSL. This config uses SSL by default.
  */
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl:
-    process.env.DATABASE_SSL === "false"
-      ? false
-      : {
-          rejectUnauthorized: false,
-        },
+    process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: false }
+      : undefined,
 });
 
 export const db = drizzle(pool);

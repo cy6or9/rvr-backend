@@ -1,106 +1,99 @@
-import { Router, Request, Response } from "express";
+import { Router } from "express";
 import fetch from "node-fetch";
 
 const router = Router();
 
-export type AQIData = {
-  aqi: number | null;
-  aqiColor: string;
-  category: string;
-};
-
-type OpenMeteoAQIResponse = {
-  hourly?: {
-    time?: string[];
-    us_aqi?: (number | null)[];
-  };
-};
-
-function aqiToColorAndCategory(aqi: number | null): {
-  color: string;
-  category: string;
-} {
-  if (aqi == null || Number.isNaN(aqi)) {
-    return { color: "#9CA3AF", category: "Unknown" };
+// Simple helper to coerce query params
+function getCoord(value: unknown): number | null {
+  if (typeof value === "string") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
   }
-
-  if (aqi <= 50) return { color: "#00E400", category: "Good" };
-  if (aqi <= 100) return { color: "#FFFF00", category: "Moderate" };
-  if (aqi <= 150)
-    return { color: "#FF7E00", category: "Unhealthy for Sensitive Groups" };
-  if (aqi <= 200) return { color: "#FF0000", category: "Unhealthy" };
-  if (aqi <= 300) return { color: "#8F3F97", category: "Very Unhealthy" };
-  return { color: "#7E0023", category: "Hazardous" };
+  return null;
 }
 
-async function aqiHandler(req: Request, res: Response): Promise<void> {
+// GET /api/weather?lat=..&lon=..
+router.get("/weather", async (req, res) => {
+  const lat = getCoord(req.query.lat);
+  const lon = getCoord(req.query.lon);
+
+  if (lat == null || lon == null) {
+    return res.status(400).json({ message: "lat and lon query parameters are required" });
+  }
+
   try {
-    const lat = parseFloat(req.query.lat as string);
-    const lon = parseFloat(req.query.lon as string);
+    const url = new URL("https://api.open-meteo.com/v1/forecast");
+    url.searchParams.set("latitude", String(lat));
+    url.searchParams.set("longitude", String(lon));
+    url.searchParams.set(
+      "current",
+      "temperature_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,weather_code",
+    );
+    url.searchParams.set("temperature_unit", "fahrenheit");
+    url.searchParams.set("wind_speed_unit", "mph");
+    url.searchParams.set("timezone", "auto");
 
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      res.status(400).json({ error: "Missing or invalid lat/lon" });
-      return;
-    }
-
-    const url =
-      `https://air-quality-api.open-meteo.com/v1/air-quality` +
-      `?latitude=${lat}&longitude=${lon}` +
-      `&hourly=us_aqi&past_days=1&timezone=America/Chicago`;
-
-    const response = await fetch(url);
+    const response = await fetch(url.toString());
     if (!response.ok) {
-      console.error("AQI HTTP error:", response.status, await response.text());
-      const fallback = aqiToColorAndCategory(null);
-      res.status(200).json({
-        aqi: null,
-        aqiColor: fallback.color,
-        category: fallback.category,
-      });
-      return;
+      const text = await response.text();
+      console.error("Weather API error:", text);
+      return res.status(502).json({ message: "Weather upstream error" });
     }
 
-    const data = (await response.json()) as OpenMeteoAQIResponse;
-    const hourly = data?.hourly;
+    const data = (await response.json()) as any;
+    const current = data.current ?? {};
 
-    let latest: number | null = null;
-
-    if (
-      hourly &&
-      Array.isArray(hourly.time) &&
-      Array.isArray(hourly.us_aqi) &&
-      hourly.us_aqi.length
-    ) {
-      for (let i = hourly.us_aqi.length - 1; i >= 0; i--) {
-        const v = hourly.us_aqi[i];
-        if (typeof v === "number") {
-          latest = v;
-          break;
-        }
-      }
-    }
-
-    const { color, category } = aqiToColorAndCategory(latest);
-
-    const payload: AQIData = {
-      aqi: latest,
-      aqiColor: color,
-      category,
+    const result = {
+      tempF: current.temperature_2m ?? null,
+      apparentTempF: current.apparent_temperature ?? null,
+      windSpeed: current.wind_speed_10m ?? null,
+      windDir: current.wind_direction_10m ?? null,
+      weatherCode: current.weather_code ?? null,
+      raw: current,
     };
 
-    res.status(200).json(payload);
+    res.json(result);
   } catch (err) {
-    console.error("AQI fetch error:", err);
-    const fallback = aqiToColorAndCategory(null);
-    res.status(200).json({
-      aqi: null,
-      aqiColor: fallback.color,
-      category: fallback.category,
-    });
+    console.error("Weather handler error:", err);
+    res.status(500).json({ message: "Failed to fetch weather" });
   }
-}
+});
 
-// Mounted at /api in index.ts → /api/aqi
-router.get("/aqi", aqiHandler);
+// GET /api/aqi?lat=..&lon=..
+router.get("/aqi", async (req, res) => {
+  const lat = getCoord(req.query.lat);
+  const lon = getCoord(req.query.lon);
+
+  if (lat == null || lon == null) {
+    return res.status(400).json({ message: "lat and lon query parameters are required" });
+  }
+
+  try {
+    const url = new URL("https://air-quality-api.open-meteo.com/v1/air-quality");
+    url.searchParams.set("latitude", String(lat));
+    url.searchParams.set("longitude", String(lon));
+    url.searchParams.set("current", "european_aqi");
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("AQI API error:", text);
+      return res.status(502).json({ message: "AQI upstream error" });
+    }
+
+    const data = (await response.json()) as any;
+    const current = data.current ?? {};
+
+    const result = {
+      aqi: current.european_aqi ?? null,
+      raw: current,
+    };
+
+    res.json(result);
+  } catch (err) {
+    console.error("AQI handler error:", err);
+    res.status(500).json({ message: "Failed to fetch AQI" });
+  }
+});
 
 export default router;

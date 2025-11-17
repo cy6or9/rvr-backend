@@ -16,18 +16,20 @@ export const articles = pgTable("articles", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-export const insertArticleSchema = createInsertSchema(articles).omit({
+export const insertArticleSchema = createInsertSchema(articles, {
+  title: (schema) => schema.title.min(1, "Title is required"),
+  excerpt: (schema) => schema.excerpt.min(1, "Excerpt is required"),
+  content: (schema) => schema.content.min(1, "Content is required"),
+  category: (schema) => schema.category.min(1, "Category is required"),
+  author: (schema) => schema.author.min(1, "Author is required"),
+}).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-}).extend({
-  title: z.string().min(1, "Title is required"),
-  excerpt: z.string().min(1, "Excerpt is required"),
-  content: z.string().min(1, "Content is required"),
-  category: z.string().min(1, "Category is required"),
-  author: z.string().min(1, "Author is required"),
-  status: z.enum(["draft", "published"]).default("draft"),
 });
 
+export const updateArticleSchema = insertArticleSchema.partial();
+
 export type InsertArticle = z.infer<typeof insertArticleSchema>;
+export type UpdateArticle = z.infer<typeof updateArticleSchema>;
 export type Article = typeof articles.$inferSelect;
