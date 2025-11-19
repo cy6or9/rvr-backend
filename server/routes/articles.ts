@@ -1,126 +1,125 @@
 import { Router } from "express";
-import { db } from "../db/drizzle.js";
-import { articles, insertArticleSchema, updateArticleSchema } from "../db/schema.js";
+import { db } from "../db/drizzle";
+import { articles, insertArticleSchema } from "../db/schema";
 import { eq, desc } from "drizzle-orm";
-import { fromError } from "zod-validation-error";
 
 const router = Router();
 
-// GET /api/articles        -> published only (public)
-router.get("/", async (_req, res) => {
+// Public: published articles only (Home, public listing)
+router.get("/", async (req, res) => {
   try {
     const rows = await db
       .select()
       .from(articles)
       .where(eq(articles.status, "published"))
       .orderBy(desc(articles.createdAt));
+
     res.json(rows);
   } catch (err) {
-    console.error("Error fetching published articles:", err);
-    res.status(500).json({ message: "Failed to load articles" });
+    console.error("GET /api/articles error:", err);
+    res.status(500).json({ error: "Failed to load articles" });
   }
 });
 
-// GET /api/articles/all    -> all statuses (admin)
-router.get("/all", async (_req, res) => {
+// Admin: all articles (draft + published)
+router.get("/all", async (req, res) => {
   try {
     const rows = await db
       .select()
       .from(articles)
       .orderBy(desc(articles.createdAt));
+
     res.json(rows);
   } catch (err) {
-    console.error("Error fetching all articles:", err);
-    res.status(500).json({ message: "Failed to load articles" });
+    console.error("GET /api/articles/all error:", err);
+    res.status(500).json({ error: "Failed to load admin articles" });
   }
 });
 
-// GET /api/articles/:id
+// Get a single article by ID
 router.get("/:id", async (req, res) => {
   try {
     const id = req.params.id;
-    const [row] = await db.select().from(articles).where(eq(articles.id, id));
-    if (!row) {
-      return res.status(404).json({ message: "Article not found" });
+    const rows = await db
+      .select()
+      .from(articles)
+      .where(eq(articles.id, id));
+
+    if (!rows.length) {
+      return res.status(404).json({ error: "Article not found" });
     }
-    res.json(row);
+
+    res.json(rows[0]);
   } catch (err) {
-    console.error("Error fetching article:", err);
-    res.status(500).json({ message: "Failed to load article" });
+    console.error("GET /api/articles/:id error:", err);
+    res.status(500).json({ error: "Failed to load article" });
   }
 });
 
-// POST /api/articles       -> create
+// Create new article
 router.post("/", async (req, res) => {
   try {
-    const parse = insertArticleSchema.safeParse(req.body);
-    if (!parse.success) {
-      const msg = fromError(parse.error).toString();
-      return res.status(400).json({ message: msg });
-    }
+    const parsed = insertArticleSchema.parse(req.body);
 
-    const [inserted] = await db
+    const [created] = await db
       .insert(articles)
-      .values({
-        ...parse.data,
-        status: parse.data.status ?? "draft",
-      })
+      // Cast to any to avoid overly-strict Drizzle TS inference
+      .values(parsed as any)
       .returning();
 
-    res.status(201).json(inserted);
-  } catch (err) {
-    console.error("Error creating article:", err);
-    res.status(500).json({ message: "Failed to create article" });
+    res.status(201).json(created);
+  } catch (err: any) {
+    console.error("POST /api/articles error:", err);
+    res.status(400).json({ error: err.message ?? "Invalid article data" });
   }
 });
 
-// PUT /api/articles/:id    -> update
-router.put("/:id", async (req, res) => {
+// Update article
+router.patch("/:id", async (req, res) => {
   try {
     const id = req.params.id;
 
-    const parse = updateArticleSchema.safeParse(req.body);
-    if (!parse.success) {
-      const msg = fromError(parse.error).toString();
-      return res.status(400).json({ message: msg });
-    }
+    // Partial update, but still validate fields if present
+    const parsed = insertArticleSchema.partial().parse(req.body);
 
     const [updated] = await db
       .update(articles)
-      .set({
-        ...parse.data,
-        updatedAt: new Date(),
-      })
+      // Cast to any to keep the type-checker happy; runtime is just a plain object.
+      .set({ ...(parsed as any), updatedAt: new Date() } as any)
       .where(eq(articles.id, id))
       .returning();
 
     if (!updated) {
-      return res.status(404).json({ message: "Article not found" });
+      return res.status(404).json({ error: "Article not found" });
     }
 
     res.json(updated);
-  } catch (err) {
-    console.error("Error updating article:", err);
-    res.status(500).json({ message: "Failed to update article" });
+  } catch (err: any) {
+    console.error("PATCH /api/articles/:id error:", err);
+    res.status(400).json({ error: err.message ?? "Invalid article data" });
   }
 });
 
-// DELETE /api/articles/:id
+// Delete article
 router.delete("/:id", async (req, res) => {
   try {
     const id = req.params.id;
-    const [deleted] = await db
+
+    const deleted = await db
       .delete(articles)
       .where(eq(articles.id, id))
       .returning();
-    if (!deleted) {
-      return res.status(404).json({ message: "Article not found" });
+
+    if (!deleted.length) {
+      return res.status(404).json({ error: "Article not found" });
     }
-    res.status(204).send();
+
+    res.json({ deletedId: id });
   } catch (err) {
-    console.error("Error deleting article:", err);
-    res.status(500).json({ message: "Failed to delete article" });
+    console.error("DELETE /api/articles/:id error:", err);
+    res.status(500).json({ error: "Failed to delete article" });
   }
 });
 
 export default router;
+

@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, timestamp } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export const articles = pgTable("articles", {
@@ -16,20 +15,25 @@ export const articles = pgTable("articles", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-export const insertArticleSchema = createInsertSchema(articles, {
-  title: (schema) => schema.title.min(1, "Title is required"),
-  excerpt: (schema) => schema.excerpt.min(1, "Excerpt is required"),
-  content: (schema) => schema.content.min(1, "Content is required"),
-  category: (schema) => schema.category.min(1, "Category is required"),
-  author: (schema) => schema.author.min(1, "Author is required"),
-}).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
+// Plain Zod schema for create/update payloads.
+// This avoids drizzle-zod's type incompatibilities on Render.
+export const insertArticleSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  excerpt: z.string().min(1, "Excerpt is required"),
+  content: z.string().min(1, "Content is required"),
+  category: z.string().min(1, "Category is required"),
+  author: z.string().min(1, "Author is required"),
+
+  // Optional image URL; allow missing or empty string
+  imageUrl: z
+    .string()
+    .url("Image URL must be a valid URL")
+    .optional()
+    .or(z.literal("")),
+
+  status: z.enum(["draft", "published"]).default("draft"),
 });
 
-export const updateArticleSchema = insertArticleSchema.partial();
-
 export type InsertArticle = z.infer<typeof insertArticleSchema>;
-export type UpdateArticle = z.infer<typeof updateArticleSchema>;
 export type Article = typeof articles.$inferSelect;
+
