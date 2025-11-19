@@ -1,2 +1,0 @@
-# rvr-backend
-rvr backend
