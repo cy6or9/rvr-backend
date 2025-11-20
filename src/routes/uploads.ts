@@ -2,9 +2,9 @@ import { Router } from "express";
 
 const router = Router();
 
-// Placeholder for uploads if needed later
-router.get("/", (req, res) => {
-  res.json({ ok: true, message: "Uploads route active" });
+// Placeholder for any upload endpoints the frontend might expect.
+router.post("/", (_req, res) => {
+  res.status(501).json({ error: "Uploads not implemented" });
 });
 
 export default router;

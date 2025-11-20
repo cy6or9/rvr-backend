@@ -1,9 +1,16 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  varchar,
+  timestamp
+} from "drizzle-orm/pg-core";
 import { z } from "zod";
 
 export const articles = pgTable("articles", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   excerpt: text("excerpt").notNull(),
   content: text("content").notNull(),
@@ -12,10 +19,9 @@ export const articles = pgTable("articles", {
   imageUrl: text("image_url"),
   status: text("status").notNull().default("draft"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow()
 });
 
-// Plain Zod schema for create/update payloads.
 export const insertArticleSchema = z.object({
   title: z.string().min(1, "Title is required"),
   excerpt: z.string().min(1, "Excerpt is required"),
@@ -27,7 +33,7 @@ export const insertArticleSchema = z.object({
     .url("Image URL must be a valid URL")
     .optional()
     .or(z.literal("")),
-  status: z.enum(["draft", "published"]).default("draft"),
+  status: z.enum(["draft", "published"]).default("draft")
 });
 
 export type InsertArticle = z.infer<typeof insertArticleSchema>;

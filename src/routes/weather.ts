@@ -2,110 +2,110 @@ import { Router, Request, Response } from "express";
 
 const router = Router();
 
-/* ---------------------------------------------------
-   Types
---------------------------------------------------- */
+/**
+ * GET /api/weather?lat=..&lon=..
+ * Uses OpenWeather current weather API
+ */
+router.get("/", weatherHandler);
 
-type AQIResponse = {
-  hourly?: {
-    time?: string[];
-    us_aqi?: (number | null)[];
-  };
-};
+export async function weatherHandler(req: Request, res: Response) {
+  const lat = String(req.query.lat || "").trim();
+  const lon = String(req.query.lon || "").trim();
 
-export type AQIData = {
-  aqi: number | null;
-  aqiColor: string;
-  category: string;
-};
-
-/* ---------------------------------------------------
-   Helpers
---------------------------------------------------- */
-
-function aqiToColorAndCategory(aqi: number | null): {
-  color: string;
-  category: string;
-} {
-  if (aqi == null || !Number.isFinite(aqi)) {
-    return { color: "#4CAF50", category: "Unknown" };
-  }
-  if (aqi <= 50) return { color: "#4CAF50", category: "Good" };
-  if (aqi <= 100) return { color: "#F4D06F", category: "Moderate" };
-  if (aqi <= 150) return { color: "#F4A259", category: "USG" };
-  if (aqi <= 200) return { color: "#D35D6E", category: "Unhealthy" };
-  if (aqi <= 300) return { color: "#9D4EDD", category: "Very Unhealthy" };
-  return { color: "#B0003A", category: "Hazardous" };
-}
-
-/* ---------------------------------------------------
-   AQI handler
-   Used for:
-   - GET /api/aqi?lat=...&lon=...
-   - GET /api/weather/aqi?lat=...&lon=...
---------------------------------------------------- */
-
-export async function aqiHandler(
-  req: Request,
-  res: Response
-): Promise<void> {
-  const lat = parseFloat(req.query.lat as string);
-  const lon = parseFloat(req.query.lon as string);
-
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-    res.status(400).json({ error: "Missing or invalid lat/lon" });
-    return;
+  if (!lat || !lon) {
+    return res.status(400).json({ error: "Missing lat/lon" });
   }
 
-  const url =
-    `https://air-quality-api.open-meteo.com/v1/air-quality` +
-    `?latitude=${lat}&longitude=${lon}` +
-    `&hourly=us_aqi&past_days=1&timezone=America/Chicago`;
+  const apiKey = process.env.OPENWEATHER_API_KEY;
+  if (!apiKey) {
+    console.error("OPENWEATHER_API_KEY is not set");
+    return res.status(500).json({ error: "Weather API not configured" });
+  }
 
   try {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`AQI HTTP ${r.status}`);
+    const url = new URL(
+      "https://api.openweathermap.org/data/2.5/weather"
+    );
+    url.searchParams.set("lat", lat);
+    url.searchParams.set("lon", lon);
+    url.searchParams.set("units", "imperial");
+    url.searchParams.set("appid", apiKey);
 
-    const j = (await r.json()) as AQIResponse;
-    const values = Array.isArray(j.hourly?.us_aqi) ? j.hourly!.us_aqi! : [];
-
-    let aqi: number | null = null;
-    for (let i = values.length - 1; i >= 0; i--) {
-      const v = values[i];
-      if (typeof v === "number" && Number.isFinite(v)) {
-        aqi = v;
-        break;
-      }
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new Error(
+        `OpenWeather error: ${response.status} ${response.statusText}`
+      );
     }
 
-    const { color, category } = aqiToColorAndCategory(aqi);
-    const payload: AQIData = {
-      aqi,
-      aqiColor: color,
-      category,
-    };
+    const data = await response.json();
 
-    res.status(200).json(payload);
+    const temp = data?.main?.temp ?? null;
+    const windSpeed = data?.wind?.speed ?? null;
+    const windDeg = data?.wind?.deg ?? null;
+    const condition = data?.weather?.[0]?.description ?? "";
+    const icon = data?.weather?.[0]?.icon ?? "";
+
+    res.json({
+      temp,
+      windSpeed,
+      windDeg,
+      condition,
+      icon,
+      raw: data
+    });
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error("AQI fetch error:", err);
-
-    const { color, category } = aqiToColorAndCategory(null);
-    const payload: AQIData = {
-      aqi: null,
-      aqiColor: color,
-      category,
-    };
-
-    res.status(200).json(payload);
+    console.error("GET /api/weather error:", err);
+    res.status(500).json({ error: "Failed to fetch weather" });
   }
 }
 
-/* ---------------------------------------------------
-   Router
-   Mounted at /api/weather in index.ts
---------------------------------------------------- */
+/**
+ * GET /api/aqi?lat=..&lon=..
+ * Uses AirNow API
+ */
+export async function aqiHandler(req: Request, res: Response) {
+  const lat = String(req.query.lat || "").trim();
+  const lon = String(req.query.lon || "").trim();
 
-router.get("/aqi", aqiHandler);
+  if (!lat || !lon) {
+    return res.status(400).json({ error: "Missing lat/lon" });
+  }
+
+  const apiKey = process.env.AIRNOW_API_KEY;
+  if (!apiKey) {
+    console.error("AIRNOW_API_KEY is not set");
+    return res.status(500).json({ error: "AQI API not configured" });
+  }
+
+  try {
+    const url = new URL(
+      "https://www.airnowapi.org/aq/observation/latLong/current/"
+    );
+    url.searchParams.set("format", "application/json");
+    url.searchParams.set("latitude", lat);
+    url.searchParams.set("longitude", lon);
+    url.searchParams.set("distance", "25");
+    url.searchParams.set("API_KEY", apiKey);
+
+    const response = await fetch(url.toString());
+    if (!response.ok) {
+      throw new Error(
+        `AirNow error: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+
+    const first = data?.[0];
+    const aqi = first?.AQI ?? null;
+    const category = first?.Category?.Name ?? null;
+
+    res.json({ aqi, category, raw: data });
+  } catch (err) {
+    console.error("GET /api/aqi error:", err);
+    res.status(500).json({ error: "Failed to fetch AQI" });
+  }
+}
 
 export default router;

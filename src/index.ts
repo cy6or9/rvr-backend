@@ -1,4 +1,3 @@
-// src/index.ts
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -7,39 +6,43 @@ import { corsMiddleware } from "./middleware/cors.js";
 import createSessionMiddleware from "./middleware/session.js";
 import { pool } from "./db/drizzle.js";
 
-import articles from "./routes/articles.js";
-import river, { riverDataHandler } from "./routes/river.js";
-import weather, { aqiHandler } from "./routes/weather.js";
-import auth from "./routes/auth.js";
-import uploads from "./routes/uploads.js";
+import articlesRouter from "./routes/articles.js";
+import riverRouter, { riverDataHandler } from "./routes/river.js";
+import weatherRouter, { aqiHandler } from "./routes/weather.js";
+import authRouter from "./routes/auth.js";
+import uploadsRouter from "./routes/uploads.js";
 
 const app = express();
 
-// Parse JSON bodies
+// JSON body parsing
 app.use(express.json());
 
-// CORS for rivervalleyreport.com
+// CORS (Netlify + local dev)
 app.use(corsMiddleware);
 
-// Sessions using Postgres store; never crashes (fallback secret if missing)
+// Sessions backed by Postgres
 app.use(createSessionMiddleware(pool));
 
-// Mount routers
-app.use("/api/articles", articles);
-app.use("/api/river", river);
-app.use("/api/weather", weather);
-app.use("/api/auth", auth);
-app.use("/api/uploads", uploads);
+// Routers
+app.use("/api/articles", articlesRouter);
+app.use("/api/river", riverRouter);
+app.use("/api/weather", weatherRouter);
+app.use("/api/auth", authRouter);
+app.use("/api/uploads", uploadsRouter);
 
-// --- Endpoints your frontend actually calls ---
+// Endpoints your frontend actually calls
 
-// River conditions: /api/river-data?site=03322420
+// River level data
 app.get("/api/river-data", riverDataHandler);
 
-// AQI: /api/aqi?lat=...&lon=...
+// Air quality index
 app.get("/api/aqi", aqiHandler);
 
-// Start server
+// Health check
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true });
+});
+
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);

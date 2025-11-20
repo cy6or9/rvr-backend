@@ -3,22 +3,20 @@ import pkg from "pg";
 
 const { Pool } = pkg;
 
-/**
- * Postgres connection via DATABASE_URL.
- *
- * Example:
- *   postgres://user:password@host:5432/dbname
- *
- * For Render / Neon, enable SSL. This config uses SSL by default.
- */
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  console.warn("DATABASE_URL is not set. Drizzle will not be able to connect.");
+}
+
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: connectionString,
   ssl:
     process.env.DATABASE_SSL === "false"
       ? false
       : {
-          rejectUnauthorized: false,
-        },
+          rejectUnauthorized: false
+        }
 });
 
 export const db = drizzle(pool);

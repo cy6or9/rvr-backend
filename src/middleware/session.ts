@@ -1,13 +1,14 @@
 import session from "express-session";
-import PgSession from "connect-pg-simple";
+import connectPgSimple from "connect-pg-simple";
+import type { Pool } from "pg";
 
-export default function createSessionMiddleware(pool) {
-  const PGStore = PgSession(session);
+export default function createSessionMiddleware(pool: Pool) {
+  const PgStore = connectPgSimple(session);
 
-  const secret = process.env.SESSION_SECRET || "fallback-secret";
+  const secret = process.env.SESSION_SECRET || "fallback-session-secret";
 
   return session({
-    store: new PGStore({
+    store: new PgStore({
       pool,
       tableName: "session"
     }),
@@ -15,9 +16,8 @@ export default function createSessionMiddleware(pool) {
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false,
+      secure: false, // Render is behind HTTPS; you can switch to true + trust proxy later
       maxAge: 24 * 60 * 60 * 1000
     }
   });
 }
-
