@@ -1,11 +1,11 @@
+// src/index.ts
 import dotenv from "dotenv";
 dotenv.config();
-import "./load-env.js";
+
 import express from "express";
 import { corsMiddleware } from "./middleware/cors.js";
-import { sessionMiddleware } from "./middleware/session.js";
 import createSessionMiddleware from "./middleware/session.js";
-
+import { pool } from "./db/drizzle.js";
 
 import articles from "./routes/articles.js";
 import river, { riverDataHandler } from "./routes/river.js";
@@ -15,15 +15,16 @@ import uploads from "./routes/uploads.js";
 
 const app = express();
 
+// Parse JSON bodies
 app.use(express.json());
+
+// CORS for rivervalleyreport.com
 app.use(corsMiddleware);
-app.use(sessionMiddleware);
+
+// Sessions using Postgres store; never crashes (fallback secret if missing)
 app.use(createSessionMiddleware(pool));
 
-// Serve uploaded files
-app.use("/uploads", express.static("uploads"));
-
-// Existing API routes
+// Mount routers
 app.use("/api/articles", articles);
 app.use("/api/river", river);
 app.use("/api/weather", weather);
@@ -39,8 +40,7 @@ app.get("/api/river-data", riverDataHandler);
 app.get("/api/aqi", aqiHandler);
 
 // Start server
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  // eslint-disable-next-line no-console
   console.log(`Backend running on port ${PORT}`);
 });
