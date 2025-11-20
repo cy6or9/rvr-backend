@@ -1,7 +1,11 @@
+import dotenv from "dotenv";
+dotenv.config();
 import "./load-env.js";
 import express from "express";
 import { corsMiddleware } from "./middleware/cors.js";
 import { sessionMiddleware } from "./middleware/session.js";
+import createSessionMiddleware from "./middleware/session.js";
+
 
 import articles from "./routes/articles.js";
 import river, { riverDataHandler } from "./routes/river.js";
@@ -14,6 +18,7 @@ const app = express();
 app.use(express.json());
 app.use(corsMiddleware);
 app.use(sessionMiddleware);
+app.use(createSessionMiddleware(pool));
 
 // Serve uploaded files
 app.use("/uploads", express.static("uploads"));

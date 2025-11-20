@@ -1,20 +1,23 @@
 import session from "express-session";
-import connectPg from "connect-pg-simple";
-import { pool } from "../db/drizzle.js";
+import PgSession from "connect-pg-simple";
 
-const PgSession = connectPg(session);
+export default function createSessionMiddleware(pool) {
+  const PGStore = PgSession(session);
 
-export const sessionMiddleware = session({
-  store: new PgSession({
-    pool,
-    tableName: "user_sessions"
-  }),
-  secret: process.env.SESSION_SECRET!,
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    maxAge: 86400000,
-    sameSite: "lax",
-    secure: false
-  }
-});
+  const secret = process.env.SESSION_SECRET || "fallback-secret";
+
+  return session({
+    store: new PGStore({
+      pool,
+      tableName: "session"
+    }),
+    secret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: false,
+      maxAge: 24 * 60 * 60 * 1000
+    }
+  });
+}
+
