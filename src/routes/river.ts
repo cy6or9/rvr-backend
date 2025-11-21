@@ -1,98 +1,36 @@
-import { Router, Request, Response } from "express";
+import { Router } from "express";
+import fetch from "node-fetch";
 
 const router = Router();
 
-/**
- * GET /api/river-data?site=XXXXXXXX
- *
- * Returns:
- * {
- *   site: string;
- *   location: string;
- *   observed: number | null;
- *   unit: string;
- *   time: string | null;
- *   floodStage: number | null;
- *   history: Array<{ time: string; value: number }>;
- *   prediction: Array<{ time: string; value: number }>;
- * }
- */
-
-export async function riverDataHandler(req: Request, res: Response) {
-  const site = String(req.query.site || "").trim();
-
-  if (!site) {
-    return res.status(400).json({ error: "Missing ?site= parameter" });
-  }
-
+router.get("/", async (req, res) => {
   try {
-    const url = new URL(
-      "https://waterservices.usgs.gov/nwis/iv/"
-    );
-    url.searchParams.set("sites", site);
-    url.searchParams.set("parameterCd", "00065"); // Gage height
-    url.searchParams.set("format", "json");
+    const site = req.query.site;
+    if (!site) return res.json({ error: "Missing site" });
 
-    const response = await fetch(url.toString());
-    if (!response.ok) {
-      throw new Error(
-        `USGS request failed: ${response.status} ${response.statusText}`
-      );
-    }
+    const url = `https://waterservices.usgs.gov/nwis/iv/?format=json&sites=${site}&parameterCd=00065`;
+    const r = await fetch(url);
+    const j = await r.json();
 
-    const data = await response.json();
+    let value = null;
+    let time = null;
 
-    const ts =
-      data?.value?.timeSeries?.[0]?.values?.[0]?.value || [];
-
-    const latest = ts[ts.length - 1];
-
-    const observed =
-      latest && latest.value ? Number(latest.value) : null;
-    const time =
-      latest && latest.dateTime ? String(latest.dateTime) : null;
-
-    const history = ts.slice(-24).map((p: any) => ({
-      time: String(p.dateTime),
-      value: Number(p.value)
-    }));
-
-    // Optional hard-coded flood stage mapping (adjust as needed)
-    const floodStageMap: Record<string, number> = {
-      // Example: "03294610": 40
-    };
-
-    const floodStage =
-      site in floodStageMap ? floodStageMap[site] : null;
+    try {
+      value = j.value.timeSeries[0].values[0].value[0].value;
+      time = j.value.timeSeries[0].values[0].value[0].dateTime;
+    } catch (e) {}
 
     res.json({
       site,
-      location: `USGS Site ${site}`,
-      observed,
-      unit: "ft",
+      observed: value,
       time,
-      floodStage,
-      history,
-      prediction: [] // you can later plug in NWS forecast here
+      unit: "ft"
     });
-  } catch (err) {
-    console.error("GET /api/river-data error:", err);
-    res.json({
-      site,
-      location: `USGS Site ${site}`,
-      observed: null,
-      unit: "ft",
-      time: null,
-      floodStage: null,
-      history: [],
-      prediction: []
-    });
-  }
-}
 
-// Simple router stub (if you want further river endpoints later)
-router.get("/", (_req, res) => {
-  res.json({ ok: true });
+  } catch (e) {
+    console.log(e);
+    res.json({ error: "Failed to load USGS data" });
+  }
 });
 
 export default router;

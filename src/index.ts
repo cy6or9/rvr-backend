@@ -2,47 +2,50 @@ import dotenv from "dotenv";
 dotenv.config();
 
 import express from "express";
-import { corsMiddleware } from "./middleware/cors.js";
-import createSessionMiddleware from "./middleware/session.js";
+import cors from "cors";
+import session from "express-session";
+import pgSession from "connect-pg-simple";
 import { pool } from "./db/drizzle.js";
 
-import articlesRouter from "./routes/articles.js";
-import riverRouter, { riverDataHandler } from "./routes/river.js";
-import weatherRouter, { aqiHandler } from "./routes/weather.js";
-import authRouter from "./routes/auth.js";
-import uploadsRouter from "./routes/uploads.js";
+import riverRoutes from "./routes/river.js";
+import weatherRoutes from "./routes/weather.js";
+import articleRoutes from "./routes/articles.js";
 
 const app = express();
 
-// JSON body parsing
+// ------------ Middleware ---------------
 app.use(express.json());
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"]
+}));
 
-// CORS (Netlify + local dev)
-app.use(corsMiddleware);
+// ------------ Sessions -----------------
+const PgSessionStore = pgSession(session);
 
-// Sessions backed by Postgres
-app.use(createSessionMiddleware(pool));
+app.use(
+  session({
+    store: new PgSessionStore({
+      pool: pool,
+      tableName: "session"
+    }),
+    secret: process.env.SESSION_SECRET || "fallback_secret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: false,
+      maxAge: 1000 * 60 * 60 * 24
+    }
+  })
+);
 
-// Routers
-app.use("/api/articles", articlesRouter);
-app.use("/api/river", riverRouter);
-app.use("/api/weather", weatherRouter);
-app.use("/api/auth", authRouter);
-app.use("/api/uploads", uploadsRouter);
+// ------------ Routes -------------------
+app.use("/api/river-data", riverRoutes);
+app.use("/api/weather", weatherRoutes);
+app.use("/api/articles", articleRoutes);
 
-// Endpoints your frontend actually calls
-
-// River level data
-app.get("/api/river-data", riverDataHandler);
-
-// Air quality index
-app.get("/api/aqi", aqiHandler);
-
-// Health check
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true });
-});
-
+// ------------ Start Server -------------
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
